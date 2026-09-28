@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Sparkles,
   Zap,
+  Workflow,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.js';
 
@@ -39,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     },
     { id: 'quest', label: 'Skill Quest', icon: Sword, badge: `${totalXP} XP` },
     { id: 'focus', label: 'Focus Mode', icon: Clock, badge: null },
+    { id: 'n8n-chat', label: 'n8n Chatbot', icon: Workflow, badge: 'Live' },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, badge: null },
     { id: 'live-intel', label: 'Live Intel', icon: Globe, badge: null },
     { id: 'settings', label: 'Settings', icon: Settings, badge: null },

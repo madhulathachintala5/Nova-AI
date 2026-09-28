@@ -815,4 +815,143 @@ Keep tone futuristic, inspiring, and sharp. Return plain markdown without greeti
   }
 });
 
+/**
+ * 10. n8n AI Chatbot Integration
+ * Webhook: https://madhulathachintala5.app.n8n.cloud/webhook/95eec8f3-24c0-463d-94cb-4eeba2ee262a/chat
+ */
+const DEFAULT_N8N_WEBHOOK = 'https://madhulathachintala5.app.n8n.cloud/webhook/95eec8f3-24c0-463d-94cb-4eeba2ee262a/chat';
+
+router.get('/n8n/status', async (req: Request, res: Response) => {
+  try {
+    const webhookUrl = (req.query.url as string) || process.env.N8N_WEBHOOK_URL || DEFAULT_N8N_WEBHOOK;
+    const startTime = Date.now();
+    
+    // Test connectivity with a lightweight check
+    let reachable = false;
+    let latencyMs = 0;
+    let message = 'Ready';
+
+    try {
+      const pingRes = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'ping',
+          message: 'ping',
+          chatInput: 'ping',
+          sessionId: 'nova-status-check',
+        }),
+      });
+      latencyMs = Date.now() - startTime;
+      reachable = pingRes.status < 500; // Even 4xx or 200 means host is up
+      message = `HTTP ${pingRes.status} in ${latencyMs}ms`;
+    } catch (err: any) {
+      latencyMs = Date.now() - startTime;
+      reachable = false;
+      message = err.message || 'Connection unreachable';
+    }
+
+    return res.json({
+      reachable,
+      latencyMs,
+      message,
+      webhookUrl,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/n8n/chat', async (req: Request, res: Response) => {
+  try {
+    const { message, chatInput, sessionId, context, webhookUrl: customUrl } = req.body;
+    const userMessage = chatInput || message || '';
+
+    if (!userMessage && req.body.action !== 'ping') {
+      return res.status(400).json({ error: 'Message or chatInput is required.' });
+    }
+
+    const n8nWebhookUrl = customUrl || process.env.N8N_WEBHOOK_URL || DEFAULT_N8N_WEBHOOK;
+    const activeSessionId = sessionId || `nova-session-${Date.now()}`;
+
+    // Payload formatted to match standard n8n AI Chat Trigger
+    const payload = {
+      action: req.body.action || 'sendMessage',
+      sessionId: activeSessionId,
+      chatInput: userMessage,
+      message: userMessage,
+      context: context || {},
+      metadata: {
+        source: 'NOVA AI Platform',
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    const startTime = Date.now();
+    const response = await fetch(n8nWebhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const latencyMs = Date.now() - startTime;
+    const contentType = response.headers.get('content-type') || '';
+    let responseData: any;
+
+    if (contentType.includes('application/json')) {
+      responseData = await response.json();
+    } else {
+      const text = await response.text();
+      try {
+        responseData = JSON.parse(text);
+      } catch {
+        responseData = { output: text };
+      }
+    }
+
+    // Extract text output from diverse n8n response shapes
+    let reply = '';
+    if (typeof responseData === 'string') {
+      reply = responseData;
+    } else if (responseData?.output) {
+      reply = typeof responseData.output === 'string' ? responseData.output : JSON.stringify(responseData.output);
+    } else if (responseData?.text) {
+      reply = responseData.text;
+    } else if (responseData?.message) {
+      reply = responseData.message;
+    } else if (responseData?.response) {
+      reply = responseData.response;
+    } else if (Array.isArray(responseData) && responseData[0]?.output) {
+      reply = responseData[0].output;
+    } else if (Array.isArray(responseData) && responseData[0]?.text) {
+      reply = responseData[0].text;
+    } else if (responseData?.data) {
+      reply = typeof responseData.data === 'string' ? responseData.data : JSON.stringify(responseData.data);
+    } else {
+      reply = JSON.stringify(responseData);
+    }
+
+    return res.json({
+      success: response.ok,
+      output: reply || 'Message received by n8n workflow.',
+      raw: responseData,
+      sessionId: activeSessionId,
+      latencyMs,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('n8n proxy error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to forward message to n8n chatbot.',
+    });
+  }
+});
+
 export default router;

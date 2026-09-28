@@ -9,6 +9,7 @@ import {
   FocusSessionRecord,
   UserProfile,
   NotificationItem,
+  N8nChatMessage,
 } from '../types/index.js';
 
 interface Toast {
@@ -48,6 +49,17 @@ interface AppContextType {
   isCommandPaletteOpen: boolean;
   setIsCommandPaletteOpen: (open: boolean) => void;
   productivityScore: number;
+  // n8n Chatbot integration
+  n8nMessages: N8nChatMessage[];
+  sendN8nMessage: (text: string) => Promise<void>;
+  isN8nLoading: boolean;
+  clearN8nChat: () => void;
+  isN8nWidgetOpen: boolean;
+  setIsN8nWidgetOpen: (open: boolean) => void;
+  n8nWebhookUrl: string;
+  setN8nWebhookUrl: (url: string) => void;
+  n8nStatus: { reachable: boolean; latencyMs: number; message: string } | null;
+  checkN8nStatus: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -279,6 +291,145 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  // n8n Chatbot Integration State
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState<string>(() => {
+    return localStorage.getItem('nova_n8n_url') || 'https://madhulathachintala5.app.n8n.cloud/webhook/95eec8f3-24c0-463d-94cb-4eeba2ee262a/chat';
+  });
+
+  const [n8nSessionId] = useState<string>(() => {
+    let sid = localStorage.getItem('nova_n8n_sid');
+    if (!sid) {
+      sid = `nova_session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      localStorage.setItem('nova_n8n_sid', sid);
+    }
+    return sid;
+  });
+
+  const [n8nMessages, setN8nMessages] = useState<N8nChatMessage[]>(() => {
+    const saved = localStorage.getItem('nova_n8n_msgs');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [
+      {
+        id: 'msg-welcome',
+        role: 'assistant',
+        content: "👋 Hello! I am your **n8n AI Chatbot**, connected directly to your cloud webhook workflow.\n\nI can execute custom automation sequences, search specialized knowledge bases, answer queries, or coordinate tasks with your NOVA workspace. How can I assist you right now?",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ];
+  });
+
+  const [isN8nLoading, setIsN8nLoading] = useState(false);
+  const [isN8nWidgetOpen, setIsN8nWidgetOpen] = useState(false);
+  const [n8nStatus, setN8nStatus] = useState<{ reachable: boolean; latencyMs: number; message: string } | null>(null);
+
+  // Sync state to localStorage
+  useEffect(() => {
+    localStorage.setItem('nova_n8n_url', n8nWebhookUrl);
+  }, [n8nWebhookUrl]);
+
+  useEffect(() => {
+    localStorage.setItem('nova_n8n_msgs', JSON.stringify(n8nMessages));
+  }, [n8nMessages]);
+
+  const checkN8nStatus = async () => {
+    try {
+      const res = await fetch(`/api/n8n/status?url=${encodeURIComponent(n8nWebhookUrl)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setN8nStatus({
+          reachable: data.reachable,
+          latencyMs: data.latencyMs,
+          message: data.message,
+        });
+      }
+    } catch (err: any) {
+      setN8nStatus({
+        reachable: false,
+        latencyMs: 0,
+        message: err.message || 'Offline',
+      });
+    }
+  };
+
+  const clearN8nChat = () => {
+    const welcomeMsg: N8nChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content: "Chat cleared. Ready for your next command or automation prompt!",
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    setN8nMessages([welcomeMsg]);
+    addToast('n8n conversation cleared', 'info');
+  };
+
+  const sendN8nMessage = async (text: string) => {
+    if (!text.trim() || isN8nLoading) return;
+
+    const userMsg: N8nChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: text.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      status: 'sent',
+    };
+
+    setN8nMessages((prev) => [...prev, userMsg]);
+    setIsN8nLoading(true);
+
+    try {
+      const res = await fetch('/api/n8n/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatInput: text.trim(),
+          message: text.trim(),
+          sessionId: n8nSessionId,
+          webhookUrl: n8nWebhookUrl,
+          context: {
+            user: user.displayName,
+            tasksCount: tasks.length,
+            completedTasks: tasks.filter((t) => t.completed).length,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server status ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      const botReply: N8nChatMessage = {
+        id: `bot-${Date.now()}`,
+        role: 'assistant',
+        content: data.output || 'Received response from n8n workflow.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        latencyMs: data.latencyMs,
+        status: data.success ? 'sent' : 'error',
+        rawResponse: data.raw,
+      };
+
+      setN8nMessages((prev) => [...prev, botReply]);
+    } catch (err: any) {
+      console.error('n8n sending error:', err);
+      const errorReply: N8nChatMessage = {
+        id: `bot-err-${Date.now()}`,
+        role: 'assistant',
+        content: `⚠️ Failed to reach n8n webhook: ${err.message}. Please verify that your n8n workflow is active and listening at \`${n8nWebhookUrl}\`.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'error',
+      };
+      setN8nMessages((prev) => [...prev, errorReply]);
+      addToast('n8n chatbot error: ' + err.message, 'error');
+    } finally {
+      setIsN8nLoading(false);
+    }
+  };
 
   // Sync state to localStorage
   useEffect(() => {
@@ -591,6 +742,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isCommandPaletteOpen,
         setIsCommandPaletteOpen,
         productivityScore,
+        n8nMessages,
+        sendN8nMessage,
+        isN8nLoading,
+        clearN8nChat,
+        isN8nWidgetOpen,
+        setIsN8nWidgetOpen,
+        n8nWebhookUrl,
+        setN8nWebhookUrl,
+        n8nStatus,
+        checkN8nStatus,
       }}
     >
       {children}

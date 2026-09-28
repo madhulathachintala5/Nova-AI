@@ -12,16 +12,34 @@ import {
   Database,
   Cpu,
   Save,
+  Workflow,
+  Radio,
+  ExternalLink,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.js';
 
 export const SettingsView: React.FC = () => {
-  const { user, setUser, tasks, documents, addToast } = useApp();
+  const {
+    user,
+    setUser,
+    tasks,
+    documents,
+    addToast,
+    n8nWebhookUrl,
+    setN8nWebhookUrl,
+    n8nStatus,
+    checkN8nStatus,
+    setActiveTab,
+  } = useApp();
 
   const [displayName, setDisplayName] = useState(user.displayName);
   const [email, setEmail] = useState(user.email);
   const [focusTarget, setFocusTarget] = useState(user.dailyFocusTargetMinutes);
   const [taskTarget, setTaskTarget] = useState(user.dailyTaskTarget);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [testingN8n, setTestingN8n] = useState(false);
 
   const [serverHealth, setServerHealth] = useState<{
     status: string;

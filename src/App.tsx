@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { ToastContainer } from './components/ToastContainer.js';
 import { AuthModal } from './components/AuthModal.js';
+import { N8nChatWidget } from './components/N8nChatWidget.js';
 
 import { OverviewView } from './views/OverviewView.js';
 import { AgentView } from './views/AgentView.js';
@@ -15,6 +16,7 @@ import { FocusView } from './views/FocusView.js';
 import { AnalyticsView } from './views/AnalyticsView.js';
 import { LiveIntelView } from './views/LiveIntelView.js';
 import { SettingsView } from './views/SettingsView.js';
+import { N8nChatView } from './views/N8nChatView.js';
 
 const MainLayout: React.FC = () => {
   const { activeTab } = useApp();
@@ -35,6 +37,8 @@ const MainLayout: React.FC = () => {
         return <SkillQuestView />;
       case 'focus':
         return <FocusView />;
+      case 'n8n-chat':
+        return <N8nChatView />;
       case 'analytics':
         return <AnalyticsView />;
       case 'live-intel':
@@ -63,6 +67,7 @@ const MainLayout: React.FC = () => {
       {/* Global Utilities */}
       <CommandPalette />
       <ToastContainer />
+      <N8nChatWidget />
       <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} />
     </div>
   );

@@ -10,6 +10,7 @@ import {
   X,
   ArrowRight,
   Zap,
+  Workflow,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.js';
 
@@ -64,6 +65,13 @@ export const CommandPalette: React.FC = () => {
           setActiveTab('agent');
         }
       },
+    },
+    {
+      id: 'n8n-bot',
+      title: 'Open n8n AI Workflow Chatbot (Live Webhook)',
+      category: 'Automation',
+      icon: Workflow,
+      action: () => setActiveTab('n8n-chat'),
     },
     {
       id: 'plan-day',

@@ -125,3 +125,13 @@ export interface NotificationItem {
   read: boolean;
   type: 'info' | 'success' | 'alert';
 }
+
+export interface N8nChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  latencyMs?: number;
+  status?: 'sending' | 'sent' | 'error';
+  rawResponse?: any;
+}
