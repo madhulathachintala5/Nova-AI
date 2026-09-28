@@ -6,6 +6,7 @@ import {
   FileText,
   Clock,
   Sword,
+  Workflow,
   CheckCircle2,
   Circle,
   TrendingUp,
@@ -36,6 +37,7 @@ export const OverviewView: React.FC = () => {
     productivityScore,
     focusRecords,
     learningProgress,
+    setIsN8nWidgetOpen,
   } = useApp();
 
   const [aiInput, setAiInput] = useState('');
@@ -174,7 +176,7 @@ export const OverviewView: React.FC = () => {
       </section>
 
       {/* Quick Action Cards */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           {
             title: 'Plan My Day',
@@ -187,10 +189,19 @@ export const OverviewView: React.FC = () => {
             },
           },
           {
+            title: 'n8n Chatbot',
+            desc: 'Trigger workflows and automation through your n8n cloud webhook',
+            icon: Workflow,
+            color: 'from-cyan-500/25 to-indigo-500/15 text-cyan-300',
+            action: () => {
+              setActiveTab('n8n-chat');
+            },
+          },
+          {
             title: 'Ask My Documents',
             desc: 'Query syllabus notes and PDFs with grounded RAG retrieval',
             icon: FileText,
-            color: 'from-cyan-500/20 to-blue-500/10 text-cyan-400',
+            color: 'from-blue-500/20 to-cyan-500/10 text-blue-400',
             action: () => setActiveTab('documents'),
           },
           {

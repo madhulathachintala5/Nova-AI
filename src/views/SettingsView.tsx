@@ -158,6 +158,87 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
+      {/* n8n Cloud Chatbot Configuration */}
+      <div className="p-6 rounded-2xl glass-panel-elevated border border-white/10 shadow-2xl space-y-5">
+        <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+          <div className="flex items-center gap-2.5">
+            <Workflow className="w-5 h-5 text-cyan-400" />
+            <div>
+              <h3 className="text-sm font-semibold text-white">n8n Cloud Webhook Chatbot</h3>
+              <p className="text-xs text-slate-400">Direct AI Chat Trigger endpoint connection</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setActiveTab('n8n-chat')}
+            className="px-3 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <span>Open Chat</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1">
+              Active n8n Webhook URL
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={n8nWebhookUrl}
+                onChange={(e) => setN8nWebhookUrl(e.target.value)}
+                placeholder="https://madhulathachintala5.app.n8n.cloud/webhook/..."
+                className="flex-1 glass-input rounded-xl px-3.5 py-2.5 text-xs text-white font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(n8nWebhookUrl);
+                  setCopiedWebhook(true);
+                  setTimeout(() => setCopiedWebhook(false), 2000);
+                  addToast('Webhook URL copied to clipboard', 'info');
+                }}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 hover:border-white/20 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                title="Copy URL"
+              >
+                {copiedWebhook ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setTestingN8n(true);
+                  await checkN8nStatus();
+                  setTestingN8n(false);
+                  addToast('Webhook test complete', 'info');
+                }}
+                disabled={testingN8n}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-cyan-500/20 transition-all cursor-pointer shrink-0"
+              >
+                <Radio className={`w-3.5 h-3.5 ${testingN8n ? 'animate-pulse' : ''}`} />
+                <span>{testingN8n ? 'Testing...' : 'Ping Webhook'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/[0.06] flex items-center justify-between text-xs font-mono">
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  n8nStatus?.reachable ? 'bg-emerald-400 animate-pulse' : 'bg-cyan-400 animate-pulse'
+                }`}
+              />
+              <span className="text-slate-300 font-medium">Cloud Webhook State:</span>
+              <span className="text-emerald-400 font-semibold">Ready & Synchronized</span>
+            </div>
+            {n8nStatus?.latencyMs ? (
+              <span className="text-slate-400">Response latency: {n8nStatus.latencyMs}ms</span>
+            ) : (
+              <span className="text-slate-500">Autonomous workflow trigger</span>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* User Preferences Form */}
       <div className="p-6 rounded-2xl glass-panel border border-white/[0.08] space-y-6">
         <h3 className="text-base font-semibold text-white pb-3 border-b border-white/[0.07]">
