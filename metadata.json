@@ -1,0 +1,8 @@
+{
+  "name": "NOVA AI — Personal AI Life & Learning Agent",
+  "description": "Futuristic personal AI command center for daily life, study planning, code quest learning, and document brain intelligence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
