@@ -224,11 +224,13 @@ export const SettingsView: React.FC = () => {
             <div className="flex items-center gap-2">
               <span
                 className={`w-2.5 h-2.5 rounded-full ${
-                  n8nStatus?.reachable ? 'bg-emerald-400 animate-pulse' : 'bg-cyan-400 animate-pulse'
+                  n8nStatus?.reachable ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-pulse'
                 }`}
               />
               <span className="text-slate-300 font-medium">Cloud Webhook State:</span>
-              <span className="text-emerald-400 font-semibold">Ready & Synchronized</span>
+              <span className={n8nStatus?.reachable ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}>
+                {n8nStatus?.message || (n8nStatus?.reachable ? 'Ready & Synchronized' : 'Checking status...')}
+              </span>
             </div>
             {n8nStatus?.latencyMs ? (
               <span className="text-slate-400">Response latency: {n8nStatus.latencyMs}ms</span>

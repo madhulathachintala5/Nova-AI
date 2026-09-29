@@ -915,26 +915,37 @@ router.post('/n8n/chat', async (req: Request, res: Response) => {
       }
     }
 
-    // Extract text output from diverse n8n response shapes
     let reply = '';
-    if (typeof responseData === 'string') {
-      reply = responseData;
-    } else if (responseData?.output) {
-      reply = typeof responseData.output === 'string' ? responseData.output : JSON.stringify(responseData.output);
-    } else if (responseData?.text) {
-      reply = responseData.text;
-    } else if (responseData?.message) {
-      reply = responseData.message;
-    } else if (responseData?.response) {
-      reply = responseData.response;
-    } else if (Array.isArray(responseData) && responseData[0]?.output) {
-      reply = responseData[0].output;
-    } else if (Array.isArray(responseData) && responseData[0]?.text) {
-      reply = responseData[0].text;
-    } else if (responseData?.data) {
-      reply = typeof responseData.data === 'string' ? responseData.data : JSON.stringify(responseData.data);
+    if (!response.ok) {
+      const errDetail = responseData?.message || responseData?.error || `HTTP ${response.status}`;
+      if (response.status === 404) {
+        reply = `⚠️ **n8n Webhook Not Found (404)**\n\nThe webhook URL \`${n8nWebhookUrl}\` is not registered on n8n Cloud.\n\n**Troubleshooting:**\n1. Ensure your n8n workflow has an **n8n Chat Trigger** or **Webhook** node.\n2. Ensure the workflow is **Active** (toggle on top-right of your n8n canvas).\n3. If using Test mode, n8n only listens for 1 request after clicking "Execute workflow". For persistent chat, activate the workflow in Production mode.`;
+      } else if (response.status === 500) {
+        reply = `⚠️ **n8n Workflow Execution Error (500)**\n\nThe webhook was reached, but your n8n workflow failed during execution: "${errDetail}".\n\n**Troubleshooting:**\n- In n8n Cloud, click the **Executions** tab in your workflow to inspect which node failed (e.g., missing OpenAI/Gemini credential or syntax in code node).`;
+      } else {
+        reply = `⚠️ **n8n Server Status ${response.status}**: ${errDetail}`;
+      }
     } else {
-      reply = JSON.stringify(responseData);
+      // Extract text output from diverse n8n response shapes
+      if (typeof responseData === 'string') {
+        reply = responseData;
+      } else if (responseData?.output) {
+        reply = typeof responseData.output === 'string' ? responseData.output : JSON.stringify(responseData.output);
+      } else if (responseData?.text) {
+        reply = responseData.text;
+      } else if (responseData?.message) {
+        reply = responseData.message;
+      } else if (responseData?.response) {
+        reply = responseData.response;
+      } else if (Array.isArray(responseData) && responseData[0]?.output) {
+        reply = responseData[0].output;
+      } else if (Array.isArray(responseData) && responseData[0]?.text) {
+        reply = responseData[0].text;
+      } else if (responseData?.data) {
+        reply = typeof responseData.data === 'string' ? responseData.data : JSON.stringify(responseData.data);
+      } else {
+        reply = JSON.stringify(responseData);
+      }
     }
 
     return res.json({

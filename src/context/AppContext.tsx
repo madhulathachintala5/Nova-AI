@@ -336,8 +336,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('nova_n8n_msgs', JSON.stringify(n8nMessages));
   }, [n8nMessages]);
 
+  // Helper to extract text from varying n8n response payloads
+  const extractN8nReply = (data: any): string => {
+    if (!data) return 'Message received by n8n workflow.';
+    if (typeof data === 'string') return data;
+    if (data.output) return typeof data.output === 'string' ? data.output : JSON.stringify(data.output);
+    if (data.text) return typeof data.text === 'string' ? data.text : JSON.stringify(data.text);
+    if (data.message) return typeof data.message === 'string' ? data.message : JSON.stringify(data.message);
+    if (data.response) return typeof data.response === 'string' ? data.response : JSON.stringify(data.response);
+    if (Array.isArray(data) && data[0]?.output) return data[0].output;
+    if (Array.isArray(data) && data[0]?.text) return data[0].text;
+    if (data.data) return typeof data.data === 'string' ? data.data : JSON.stringify(data.data);
+    return JSON.stringify(data);
+  };
+
   const checkN8nStatus = async () => {
+    const startTime = Date.now();
     try {
+      // 1. Try local server proxy
       const res = await fetch(`/api/n8n/status?url=${encodeURIComponent(n8nWebhookUrl)}`);
       if (res.ok) {
         const data = await res.json();
@@ -346,7 +362,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           latencyMs: data.latencyMs,
           message: data.message,
         });
+        return;
       }
+    } catch {
+      // Server proxy not available (e.g. Vercel static deployment)
+    }
+
+    // 2. Direct ping check fallback (works in browser if server route 404s)
+    try {
+      const directRes = await fetch(n8nWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ping',
+          message: 'ping',
+          chatInput: 'ping',
+          sessionId: 'nova-status-check',
+        }),
+      });
+      const latency = Date.now() - startTime;
+      const ok = directRes.status < 500;
+      setN8nStatus({
+        reachable: ok,
+        latencyMs: latency,
+        message: directRes.ok ? `HTTP ${directRes.status} (Direct)` : `HTTP ${directRes.status}`,
+      });
     } catch (err: any) {
       setN8nStatus({
         reachable: false,
@@ -381,37 +421,107 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setN8nMessages((prev) => [...prev, userMsg]);
     setIsN8nLoading(true);
 
-    try {
-      const res = await fetch('/api/n8n/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatInput: text.trim(),
-          message: text.trim(),
-          sessionId: n8nSessionId,
-          webhookUrl: n8nWebhookUrl,
-          context: {
-            user: user.displayName,
-            tasksCount: tasks.length,
-            completedTasks: tasks.filter((t) => t.completed).length,
-          },
-        }),
-      });
+    const payload = {
+      chatInput: text.trim(),
+      message: text.trim(),
+      sessionId: n8nSessionId,
+      webhookUrl: n8nWebhookUrl,
+      context: {
+        user: user.displayName,
+        tasksCount: tasks.length,
+        completedTasks: tasks.filter((t) => t.completed).length,
+      },
+      metadata: {
+        source: 'NOVA AI Platform',
+        timestamp: new Date().toISOString(),
+      },
+    };
 
-      if (!res.ok) {
-        throw new Error(`Server status ${res.status}`);
+    const startTime = Date.now();
+    let replyContent = '';
+    let rawResponse: any = null;
+    let latency = 0;
+    let isSuccess = true;
+
+    try {
+      // Step 1: Attempt via local backend proxy (/api/n8n/chat)
+      let usedProxy = false;
+      try {
+        const proxyRes = await fetch('/api/n8n/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        // If the server proxy is running and doesn't return 404/502 (e.g. Vercel missing backend)
+        if (proxyRes.status !== 404 && proxyRes.status !== 405) {
+          usedProxy = true;
+          const data = await proxyRes.json();
+          latency = data.latencyMs || (Date.now() - startTime);
+          rawResponse = data.raw;
+          replyContent = data.output || 'Received response from n8n workflow.';
+          isSuccess = data.success !== false;
+
+          if (!proxyRes.ok && !data.output) {
+            throw new Error(data.error || `Proxy error ${proxyRes.status}`);
+          }
+        }
+      } catch (proxyErr: any) {
+        // If it failed because /api/n8n/chat is 404 (e.g. Vercel static), fallback to direct call
+        if (usedProxy) {
+          throw proxyErr;
+        }
       }
 
-      const data = await res.json();
+      // Step 2: Fallback to direct client-side fetch to n8n webhook (Vercel static support)
+      if (!usedProxy) {
+        const directRes = await fetch(n8nWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/plain, */*',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        latency = Date.now() - startTime;
+        const contentType = directRes.headers.get('content-type') || '';
+
+        if (contentType.includes('application/json')) {
+          rawResponse = await directRes.json();
+        } else {
+          const rawText = await directRes.text();
+          try {
+            rawResponse = JSON.parse(rawText);
+          } catch {
+            rawResponse = { output: rawText };
+          }
+        }
+
+        if (!directRes.ok) {
+          isSuccess = false;
+          const errDetail = rawResponse?.message || rawResponse?.error || `Status ${directRes.status}`;
+          
+          if (directRes.status === 404) {
+            replyContent = `⚠️ **n8n Webhook Not Found (404)**\n\nn8n Cloud returned 404 for \`${n8nWebhookUrl}\`.\n\n**How to fix:**\n1. Open your n8n workflow canvas.\n2. Ensure the workflow is **Active** (toggle on top-right).\n3. If running in Test mode, click **Execute workflow** or switch the URL to production.\n4. Verify that the Webhook path is \`95eec8f3-24c0-463d-94cb-4eeba2ee262a/chat\`.`;
+          } else if (directRes.status === 500) {
+            replyContent = `⚠️ **n8n Workflow Execution Error (500)**\n\nThe webhook was reached, but your n8n workflow encountered an internal node error: *"${errDetail}"*.\n\n**How to fix:**\n- Check your n8n workflow **Executions** tab to see which node failed (e.g., AI Agent, Model Credential, or Chat Memory node).`;
+          } else {
+            replyContent = `⚠️ **n8n Returned Error (${directRes.status})**: ${errDetail}`;
+          }
+        } else {
+          replyContent = extractN8nReply(rawResponse);
+        }
+      }
 
       const botReply: N8nChatMessage = {
         id: `bot-${Date.now()}`,
         role: 'assistant',
-        content: data.output || 'Received response from n8n workflow.',
+        content: replyContent,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        latencyMs: data.latencyMs,
-        status: data.success ? 'sent' : 'error',
-        rawResponse: data.raw,
+        latencyMs: latency,
+        status: isSuccess ? 'sent' : 'error',
+        rawResponse,
       };
 
       setN8nMessages((prev) => [...prev, botReply]);
@@ -420,12 +530,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const errorReply: N8nChatMessage = {
         id: `bot-err-${Date.now()}`,
         role: 'assistant',
-        content: `⚠️ Failed to reach n8n webhook: ${err.message}. Please verify that your n8n workflow is active and listening at \`${n8nWebhookUrl}\`.`,
+        content: `⚠️ Failed to reach n8n webhook: ${err.message}. Please verify network connectivity and that your n8n workflow is active at \`${n8nWebhookUrl}\`.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'error',
       };
       setN8nMessages((prev) => [...prev, errorReply]);
-      addToast('n8n chatbot error: ' + err.message, 'error');
+      addToast('n8n connection error: ' + err.message, 'error');
     } finally {
       setIsN8nLoading(false);
     }
